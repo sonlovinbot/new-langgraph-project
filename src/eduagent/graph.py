@@ -1,10 +1,13 @@
 from __future__ import annotations
+import os
 from dotenv import load_dotenv
+from typing import TypedDict, Annotated, List, Union
 from typing import Annotated, List, Optional
 from dataclasses import dataclass
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langgraph.graph import StateGraph, END
 from langgraph.graph import StateGraph
 
 load_dotenv()  # đảm bảo đọc OPENAI_API_KEY sớm
@@ -28,6 +31,8 @@ class State:
 def planner_agent(state: State, config: RunnableConfig) -> dict:
     """Sử dụng LLM để suy luận bước tiếp theo và chọn agent phù hợp."""
     print("🔍 [Planner Agent] Suy nghĩ kế hoạch...")
+    msg = AIMessage(content="Tôi đã hiểu yêu cầu. Để tôi lên kế hoạch cho bạn.")
+    return {"messages": state.messages + [msg]}
 
     planning_prompt = state.messages + [
         HumanMessage(
@@ -71,6 +76,9 @@ def teacher_agent(state: State, config: RunnableConfig) -> dict:
     return {"messages": state.messages + [response]}
 
 
+def parent_coach_agent(state: State, config: RunnableConfig) -> dict:
+    print("👨‍👩‍👧 [Parent Coach Agent] Gợi ý cho phụ huynh...")
+    msg = AIMessage(content="Gợi ý: hãy cùng con luyện tập 15 phút mỗi ngày và hỏi con xem con hiểu bài chưa.")
 def visual_agent(state: State, config: RunnableConfig) -> dict:
     print("🖼️ [Visual Agent] Tạo nội dung trực quan...")
     msg = AIMessage(content="Đây là nội dung trực quan cho yêu cầu của bạn.")
@@ -94,11 +102,16 @@ graph = StateGraph(State)
 
 graph.add_node("planner", planner_agent)
 graph.add_node("teacher", teacher_agent)
+graph.add_node("parent", parent_coach_agent)
 graph.add_node("visual", visual_agent)
 graph.add_node("rag", rag_agent)
 graph.add_node("end", finish)
 
 graph.set_entry_point("planner")
+graph.add_edge("planner", "teacher")
+graph.add_edge("teacher", "rag")
+graph.add_edge("rag", "parent")
+graph.add_edge("parent", "end")
 graph.add_conditional_edges(
     "planner",
     lambda state: state.next_agent,
